@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import re
+from html import escape
 
 import requests
 import streamlit as st
@@ -93,6 +94,131 @@ Regeln:
 - Erfasse erkennbare Varianten (z. B. unterschiedliche Farben/Materialien/Größen).
 - Rückgabe als faktische Bullet-List.
 """.strip()
+
+
+
+
+EBAY_TEMPLATE = r"""
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=Lato:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  body, div, h1, h2, h3, p, ul, li, span, img, label, input { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Lato', sans-serif; background-color: #ffffff; color: #262626; line-height: 1.8; -webkit-font-smoothing: antialiased; font-weight: 300; }
+  .luxe-container { max-width: 1000px; margin: 0 auto; background: #ffffff; padding: 20px; }
+  .luxe-top-bar { text-align: center; border-bottom: 1px solid #fafafa; padding: 40px 0 30px; margin-bottom: 40px; }
+  .luxe-brand-logo { font-family: 'Cinzel', serif; font-size: 32px; letter-spacing: 5px; color: #171717; text-transform: uppercase; margin-bottom: 5px; display: block; }
+  .luxe-brand-tagline { font-family: 'Playfair Display', serif; font-style: italic; font-size: 12px; color: #a3a3a3; }
+  .luxe-title-section { text-align: center; margin-bottom: 50px; }
+  .luxe-vertical-line { width: 1px; height: 50px; background-color: #e8d3a3; margin: 0 auto 30px; }
+  .luxe-title { font-family: 'Playfair Display', serif; font-size: 38px; color: #171717; margin-bottom: 20px; font-weight: 500; line-height: 1.3; }
+  .luxe-subtitle { font-size: 13px; color: #737373; text-transform: uppercase; letter-spacing: 2px; }
+  .luxe-grid { display: flex; flex-wrap: wrap; gap: 50px; margin-bottom: 80px; align-items: flex-start; }
+  .luxe-col-left { flex: 1 1 500px; }
+  .luxe-col-right { flex: 1 1 350px; }
+  .luxe-col-full { flex: 1 1 100%; max-width: 800px; margin: 0 auto; }
+  .luxe-main-image-wrapper { position: relative; background-color: #fafafa; margin-bottom: 20px; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: center; height: 550px; overflow: hidden; }
+  .luxe-main-img { max-width: 95%; max-height: 95%; object-fit: contain; mix-blend-mode: multiply; }
+  .luxe-thumbs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; }
+  .luxe-thumb { width: 80px; height: 80px; object-fit: cover; border: 1px solid #e5e5e5; opacity: 0.7; }
+  .luxe-price-block { margin-bottom: 40px; }
+  .luxe-price { font-family: 'Playfair Display', serif; font-size: 42px; color: #171717; display: block; line-height: 1; margin-bottom: 10px; }
+  .luxe-desc { font-size: 15px; color: #525252; margin-bottom: 40px; text-align: justify; font-weight: 300; }
+  .luxe-specs-title { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #171717; border-bottom: 1px solid #f5f5f5; padding-bottom: 10px; margin-bottom: 20px; }
+  .luxe-spec-item { display: flex; align-items: flex-start; font-size: 14px; color: #525252; margin-bottom: 12px; }
+  .luxe-spec-icon { color: #d4d4d4; margin-right: 15px; font-size: 16px; }
+  .luxe-promo-section { margin-bottom: 80px; border: 1px solid #f5f5f5; background: #fafafa; }
+  .luxe-promo-img { width: 100%; height: 300px; object-fit: cover; display: block; }
+  .luxe-promo-content { padding: 40px; text-align: center; }
+  .luxe-promo-title { font-family: 'Cinzel', serif; font-size: 18px; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 15px; color: #171717; }
+  .luxe-promo-desc { font-size: 14px; color: #737373; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+  .luxe-tabs-section { border-top: 1px solid #f5f5f5; padding-top: 60px; margin-top: 60px; text-align: center; position: relative; }
+  .luxe-tab-input { display: none; }
+  .luxe-tab-header { margin-bottom: 40px; }
+  .luxe-tab-title {
+    display: inline-block;
+    margin: 0 20px;
+    font-family: 'Cinzel', serif;
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #a3a3a3;
+    border-bottom: 1px solid transparent;
+    padding-bottom: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .luxe-tab-content {
+    display: none;
+    max-width: 700px;
+    margin: 0 auto;
+    font-size: 14px;
+    color: #737373;
+    min-height: 100px;
+  }
+  #luxe-tab-1:checked ~ .luxe-tab-header label[for="luxe-tab-1"],
+  #luxe-tab-2:checked ~ .luxe-tab-header label[for="luxe-tab-2"],
+  #luxe-tab-3:checked ~ .luxe-tab-header label[for="luxe-tab-3"] {
+    color: #171717;
+    border-bottom: 1px solid #171717;
+  }
+  #luxe-tab-1:checked ~ .luxe-tab-content-1,
+  #luxe-tab-2:checked ~ .luxe-tab-content-2,
+  #luxe-tab-3:checked ~ .luxe-tab-content-3 {
+    display: block;
+  }
+  .luxe-footer { margin-top: 80px; padding-top: 40px; border-top: 1px solid #f5f5f5; text-align: center; }
+  .luxe-copyright { font-size: 10px; color: #e5e5e5; letter-spacing: 2px; text-transform: uppercase; }
+  @media (max-width: 768px) {
+    .luxe-main-image-wrapper { height: auto; max-height: none; min-height: 300px; }
+    .luxe-title { font-size: 28px; }
+    .luxe-grid { flex-direction: column; gap: 30px; }
+    .luxe-col-left, .luxe-col-right { flex: 1 1 100%; width: 100%; }
+    .luxe-tab-title { display: block; margin: 0 0 15px; border-bottom: none !important; }
+  }
+</style>
+
+<div class="luxe-container">
+  <div class="luxe-top-bar"><span class="luxe-brand-logo">Juwelique</span><span class="luxe-brand-tagline">Fine &amp; Contemporary Jewelry</span></div>
+  <div class="luxe-title-section"><div class="luxe-vertical-line"></div><h1 class="luxe-title">{{TITLE}}</h1></div>
+  <div class="luxe-grid">
+    <div class="luxe-col-full">
+      <div class="luxe-price-block"><span class="luxe-price"></span></div>
+      <div class="luxe-desc">{{DESCRIPTION}}</div>
+      <div class="luxe-specs">
+        <h3 class="luxe-specs-title">Details &amp; Material</h3>
+      </div>
+    </div>
+  </div>
+  <div class="luxe-tabs-section">
+    <input type="radio" name="luxe-tabs" id="luxe-tab-1" class="luxe-tab-input" checked="">
+    <input type="radio" name="luxe-tabs" id="luxe-tab-2" class="luxe-tab-input">
+    <input type="radio" name="luxe-tabs" id="luxe-tab-3" class="luxe-tab-input">
+    <div class="luxe-tab-header">
+      <label for="luxe-tab-1" class="luxe-tab-title">Details</label>
+      <label for="luxe-tab-2" class="luxe-tab-title">Versand</label>
+      <label for="luxe-tab-3" class="luxe-tab-title">Rückgabe</label>
+    </div>
+    <div class="luxe-tab-content luxe-tab-content-1">
+      Modern icons, precision set — refined brilliance defines contemporary fine and fashion jewelry, crafted for everyday grandeur.
+    </div>
+    <div class="luxe-tab-content luxe-tab-content-2">
+      Kostenloser &amp; Versicherter Versand.
+    </div>
+    <div class="luxe-tab-content luxe-tab-content-3">
+      30 Tage Rückgaberecht
+    </div>
+  </div>
+  <div class="luxe-footer"><p class="luxe-copyright">© 2026 Juwelique</p></div>
+</div>
+"""
+
+
+def build_ebay_template(title: str, description: str) -> str:
+    safe_title = escape((title or '').strip())
+    safe_desc = escape((description or '').strip())
+    safe_desc = safe_desc.replace("\n\n", "<br><br>").replace("\n", "<br>")
+    return EBAY_TEMPLATE.replace("{{TITLE}}", safe_title).replace("{{DESCRIPTION}}", safe_desc)
 
 
 def clear_all():
@@ -448,14 +574,17 @@ with col2:
     de_title_val = st.session_state.get("out_de_title", "")
     de_desc_val = st.session_state.get("out_de_desc", "")
     combined_de = f"{de_title_val}\n\n{de_desc_val}"
+    ebay_html = build_ebay_template(de_title_val, de_desc_val)
 
-    col_copy_left, col_copy_mid, col_copy_right = st.columns([1, 1, 1])
+    col_copy_left, col_copy_mid, col_copy_right, col_copy_template = st.columns([1, 1, 1, 1.2])
     with col_copy_left:
         render_copy_button("Copy DE Title", de_title_val, key="copy_de_title")
     with col_copy_mid:
         render_copy_button("Copy Both (DE)", combined_de, key="copy_de_both")
     with col_copy_right:
         render_copy_button("Copy DE Description", de_desc_val, key="copy_de_desc")
+    with col_copy_template:
+        render_copy_button("Copy eBay Template (DE)", ebay_html, key="copy_de_ebay_template")
 
     st.divider()
     st.caption("Draft memory (what the model will update next):")
