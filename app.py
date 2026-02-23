@@ -76,7 +76,7 @@ DESCRIPTION:
 
 Regeln:
 - Gib NUR den [DE]-Block aus.
-- Titel SEO-stark und klickstark formulieren.
+- Titel SEO-stark und klickstark formulieren. hochwertige / suchrelevante Materialien im Titel priorisieren.
 - Titel darf maximal 80 Zeichen haben.
 - Übernimm KEINE Marken-, Hersteller-, Shop- oder Modellnamen aus dem Input.
 - Nutze Informationen aus SOURCE, IMAGE NOTES, VARIANTS NOTE und UPDATE NOTES als Faktenbasis.
