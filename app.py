@@ -87,7 +87,8 @@ Regeln:
 - Übernimm KEINE Marken-, Hersteller-, Shop- oder Modellnamen aus dem Input.
 - Nutze Informationen aus SOURCE, IMAGE NOTES, VARIANTS NOTE und UPDATE NOTES als Faktenbasis.
 - Keine Emojis, keine Zusatzkommentare.
-- BULLETS: exakt 4 kurze Bullet-Points aus den wichtigsten Produktfakten.
+- DESCRIPTION muss alle relevanten Produktinformationen vollständig enthalten (nicht nur allgemein formulieren).
+- BULLETS: exakt 4 kurze Bullet-Points aus den wichtigsten Produktfakten, die bereits in DESCRIPTION enthalten sind.
 - Jeder Bullet beginnt mit "- ".
 """.strip()
 
@@ -224,7 +225,7 @@ EBAY_TEMPLATE = r"""
 
 def build_ebay_template(title: str, description: str, bullets: list[str]) -> str:
     bullets_html = "".join(
-        f'<div class="luxe-spec-item"><span class="luxe-spec-icon">◇</span><span>{escape(item)}</span></div>'
+        f'<div class="luxe-spec-item"><span class="luxe-spec-icon">◈</span><span>{escape(item)}</span></div>'
         for item in (bullets or [])
     )
 
