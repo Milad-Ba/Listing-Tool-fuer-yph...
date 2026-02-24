@@ -74,6 +74,11 @@ Ausgabeformat MUSS exakt sein:
 TITLE: <eine Zeile>
 DESCRIPTION:
 <ein oder mehrere Absätze>
+BULLETS:
+- <Bullet 1>
+- <Bullet 2>
+- <Bullet 3>
+- <Bullet 4>
 
 Regeln:
 - Gib NUR den [DE]-Block aus.
@@ -82,6 +87,9 @@ Regeln:
 - Übernimm KEINE Marken-, Hersteller-, Shop- oder Modellnamen aus dem Input.
 - Nutze Informationen aus SOURCE, IMAGE NOTES, VARIANTS NOTE und UPDATE NOTES als Faktenbasis.
 - Keine Emojis, keine Zusatzkommentare.
+- DESCRIPTION muss alle relevanten Produktinformationen vollständig enthalten (nicht nur allgemein formulieren).
+- BULLETS: exakt 4 kurze Bullet-Points aus den wichtigsten Produktfakten, die bereits in DESCRIPTION enthalten sind.
+- Jeder Bullet beginnt mit "- ".
 """.strip()
 
 VISION_SYSTEM_PROMPT = """
@@ -126,7 +134,7 @@ EBAY_TEMPLATE = r"""
   .luxe-desc { font-size: 15px; color: #525252; margin-bottom: 40px; text-align: justify; font-weight: 300; }
   .luxe-specs-title { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #171717; border-bottom: 1px solid #f5f5f5; padding-bottom: 10px; margin-bottom: 20px; }
   .luxe-spec-item { display: flex; align-items: flex-start; font-size: 14px; color: #525252; margin-bottom: 12px; }
-  .luxe-spec-icon { color: #d4d4d4; margin-right: 15px; font-size: 16px; }
+  .luxe-spec-icon { color: #c98b8b; margin-right: 15px; font-size: 13px; line-height: 1.4; }
   .luxe-promo-section { margin-bottom: 80px; border: 1px solid #f5f5f5; background: #fafafa; }
   .luxe-promo-img { width: 100%; height: 300px; object-fit: cover; display: block; }
   .luxe-promo-content { padding: 40px; text-align: center; }
@@ -187,6 +195,7 @@ EBAY_TEMPLATE = r"""
       <div class="luxe-desc">{{DESCRIPTION}}</div>
       <div class="luxe-specs">
         <h3 class="luxe-specs-title">Details &amp; Material</h3>
+        {{DETAIL_BULLETS}}
       </div>
     </div>
   </div>
@@ -214,11 +223,21 @@ EBAY_TEMPLATE = r"""
 """
 
 
-def build_ebay_template(title: str, description: str) -> str:
+def build_ebay_template(title: str, description: str, bullets: list[str]) -> str:
+    bullets_html = "".join(
+        f'<div class="luxe-spec-item"><span class="luxe-spec-icon">◈</span><span>{escape(item)}</span></div>'
+        for item in (bullets or [])
+    )
+
     safe_title = escape((title or '').strip())
     safe_desc = escape((description or '').strip())
     safe_desc = safe_desc.replace("\n\n", "<br><br>").replace("\n", "<br>")
-    return EBAY_TEMPLATE.replace("{{TITLE}}", safe_title).replace("{{DESCRIPTION}}", safe_desc)
+    return (
+        EBAY_TEMPLATE
+        .replace("{{TITLE}}", safe_title)
+        .replace("{{DESCRIPTION}}", safe_desc)
+        .replace("{{DETAIL_BULLETS}}", bullets_html)
+    )
 
 
 def clear_all():
@@ -230,6 +249,7 @@ def clear_all():
         "update_notes",
         "out_de_title",
         "out_de_desc",
+        "out_de_bullets",
         "draft_raw",
         "image_upload",
     ]
@@ -278,12 +298,21 @@ def parse_block(text: str, tag: str = "DE") -> dict:
     block = match.group(1).strip() if match else ""
 
     title_match = re.search(r"(?m)^\s*TITLE:\s*(.+)\s*$", block)
-    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.+)\s*$", block)
+    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.*?)(?:\nBULLETS:|\s*$)", block)
+    bullets_match = re.search(r"(?s)BULLETS:\s*(.+?)\s*$", block)
+
+    bullet_items = []
+    if bullets_match:
+        for line in bullets_match.group(1).splitlines():
+            line = re.sub(r"^\s*[-*•]\s*", "", line).strip()
+            if line:
+                bullet_items.append(line)
 
     return {
         "raw": cleaned,
         "title": title_match.group(1).strip() if title_match else "",
         "desc": desc_match.group(1).strip() if desc_match else "",
+        "bullets": bullet_items[:4],
         "has_block": bool(block),
     }
 
@@ -505,6 +534,7 @@ with col1:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
+            st.session_state["out_de_bullets"] = parsed_de.get("bullets", [])
             st.rerun()
 
     with st.form("update_form"):
@@ -566,6 +596,7 @@ with col2:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
+            st.session_state["out_de_bullets"] = parsed_de.get("bullets", [])
 
     st.text_input("Title (DE) — must be ≤ 80 chars", key="out_de_title")
     st.caption(f"DE title length: {len(st.session_state.get('out_de_title', ''))} / 80")
@@ -574,7 +605,8 @@ with col2:
     de_title_val = st.session_state.get("out_de_title", "")
     de_desc_val = st.session_state.get("out_de_desc", "")
     combined_de = f"{de_title_val}\n\n{de_desc_val}"
-    ebay_html = build_ebay_template(de_title_val, de_desc_val)
+    de_bullets_val = st.session_state.get("out_de_bullets", [])
+    ebay_html = build_ebay_template(de_title_val, de_desc_val, de_bullets_val)
 
     col_copy_left, col_copy_mid, col_copy_right, col_copy_template = st.columns([1, 1, 1, 1.2])
     with col_copy_left:
