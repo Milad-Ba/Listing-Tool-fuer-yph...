@@ -74,6 +74,11 @@ Ausgabeformat MUSS exakt sein:
 TITLE: <eine Zeile>
 DESCRIPTION:
 <ein oder mehrere Absätze>
+SPECS:
+- Form: <Wert oder n/a>
+- Stein: <Wert oder n/a>
+- Material: <Wert oder n/a>
+- Beschichtung: <Wert oder n/a>
 
 Regeln:
 - Gib NUR den [DE]-Block aus.
@@ -82,6 +87,8 @@ Regeln:
 - Übernimm KEINE Marken-, Hersteller-, Shop- oder Modellnamen aus dem Input.
 - Nutze Informationen aus SOURCE, IMAGE NOTES, VARIANTS NOTE und UPDATE NOTES als Faktenbasis.
 - Keine Emojis, keine Zusatzkommentare.
+- Gib im SPECS-Teil nur faktenbasierte Bullet-Zeilen aus (keine Fließtexte).
+- Wenn ein Feld unbekannt ist, nutze "n/a".
 """.strip()
 
 VISION_SYSTEM_PROMPT = """
@@ -216,7 +223,20 @@ EBAY_TEMPLATE = r"""
 """
 
 
-def build_ebay_template(title: str, description: str) -> str:
+def build_specs_html(specs_lines: list[str]) -> str:
+    items = []
+    for line in specs_lines:
+        cleaned = re.sub(r"^\s*[-*•]\s*", "", (line or "").strip())
+        if not cleaned:
+            continue
+        safe_line = escape(cleaned)
+        items.append(
+            f'<div class="luxe-spec-item"><span class="luxe-spec-icon">✦</span><span>{safe_line}</span></div>'
+        )
+    return "\n".join(items)
+
+
+def build_ebay_template(title: str, description: str, specs_lines: list[str]) -> str:
     safe_title = escape((title or '').strip())
     description_text = (description or '').strip()
     safe_desc = escape(description_text)
@@ -255,6 +275,7 @@ def clear_all():
 
     for key in keys_to_clear:
         st.session_state[key] = ""
+    st.session_state["out_specs_lines"] = []
 
     current_uploader_key = st.session_state.get("uploader_key", 0)
     st.session_state.pop(f"image_upload_{current_uploader_key}", None)
@@ -297,14 +318,42 @@ def parse_block(text: str, tag: str = "DE") -> dict:
     block = match.group(1).strip() if match else ""
 
     title_match = re.search(r"(?m)^\s*TITLE:\s*(.+)\s*$", block)
-    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.+)\s*$", block)
+    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.*?)(?:\n\s*SPECS:\s*|\s*$)", block)
+    specs_lines = extract_specs_lines(block)
 
     return {
         "raw": cleaned,
         "title": title_match.group(1).strip() if title_match else "",
         "desc": desc_match.group(1).strip() if desc_match else "",
+        "specs_lines": specs_lines,
         "has_block": bool(block),
     }
+
+
+def extract_specs_lines(block: str) -> list[str]:
+    if not block:
+        return []
+
+    specs_match = re.search(r"(?is)\bSPECS:\s*(.*)$", block)
+    if specs_match:
+        candidate = specs_match.group(1)
+    else:
+        desc_match = re.search(r"(?is)\bDESCRIPTION:\s*(.*)$", block)
+        candidate = desc_match.group(1) if desc_match else block
+
+    specs = []
+    for raw_line in candidate.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        bullet = re.match(r"^[-*•]\s*(.+)$", line)
+        if not bullet:
+            continue
+        text = bullet.group(1).strip()
+        if re.match(r"(?i)^(form|stein|material|beschichtung)\s*:", text):
+            specs.append(f"- {text}")
+
+    return specs
 
 
 def de_title_ok(title: str) -> bool:
@@ -524,6 +573,7 @@ with col1:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
+            st.session_state["out_specs_lines"] = parsed_de["specs_lines"]
             st.rerun()
 
     with st.form("update_form"):
@@ -585,6 +635,7 @@ with col2:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
+            st.session_state["out_specs_lines"] = parsed_de["specs_lines"]
 
     st.text_input("Title (DE) — must be ≤ 80 chars", key="out_de_title")
     st.caption(f"DE title length: {len(st.session_state.get('out_de_title', ''))} / 80")
@@ -593,7 +644,8 @@ with col2:
     de_title_val = st.session_state.get("out_de_title", "")
     de_desc_val = st.session_state.get("out_de_desc", "")
     combined_de = f"{de_title_val}\n\n{de_desc_val}"
-    ebay_html = build_ebay_template(de_title_val, de_desc_val)
+    specs_lines_val = st.session_state.get("out_specs_lines", [])
+    ebay_html = build_ebay_template(de_title_val, de_desc_val, specs_lines_val)
 
     col_copy_left, col_copy_mid, col_copy_right, col_copy_template = st.columns([1, 1, 1, 1.2])
     with col_copy_left:
