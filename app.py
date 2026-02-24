@@ -126,7 +126,7 @@ EBAY_TEMPLATE = r"""
   .luxe-desc { font-size: 15px; color: #525252; margin-bottom: 40px; text-align: justify; font-weight: 300; }
   .luxe-specs-title { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #171717; border-bottom: 1px solid #f5f5f5; padding-bottom: 10px; margin-bottom: 20px; }
   .luxe-spec-item { display: flex; align-items: flex-start; font-size: 14px; color: #525252; margin-bottom: 12px; }
-  .luxe-spec-icon { color: #d4d4d4; margin-right: 15px; font-size: 16px; }
+  .luxe-spec-icon { color: #c98b8b; margin-right: 15px; font-size: 13px; line-height: 1.4; }
   .luxe-promo-section { margin-bottom: 80px; border: 1px solid #f5f5f5; background: #fafafa; }
   .luxe-promo-img { width: 100%; height: 300px; object-fit: cover; display: block; }
   .luxe-promo-content { padding: 40px; text-align: center; }
@@ -187,6 +187,7 @@ EBAY_TEMPLATE = r"""
       <div class="luxe-desc">{{DESCRIPTION}}</div>
       <div class="luxe-specs">
         <h3 class="luxe-specs-title">Details &amp; Material</h3>
+        {{DETAIL_BULLETS}}
       </div>
     </div>
   </div>
@@ -215,10 +216,51 @@ EBAY_TEMPLATE = r"""
 
 
 def build_ebay_template(title: str, description: str) -> str:
+    bullet_items = build_detail_bullets(description)
+    bullets_html = "".join(
+        f'<div class="luxe-spec-item"><span class="luxe-spec-icon">◇</span><span>{escape(item)}</span></div>'
+        for item in bullet_items
+    )
+
     safe_title = escape((title or '').strip())
     safe_desc = escape((description or '').strip())
     safe_desc = safe_desc.replace("\n\n", "<br><br>").replace("\n", "<br>")
-    return EBAY_TEMPLATE.replace("{{TITLE}}", safe_title).replace("{{DESCRIPTION}}", safe_desc)
+    return (
+        EBAY_TEMPLATE
+        .replace("{{TITLE}}", safe_title)
+        .replace("{{DESCRIPTION}}", safe_desc)
+        .replace("{{DETAIL_BULLETS}}", bullets_html)
+    )
+
+
+def build_detail_bullets(description: str) -> list[str]:
+    raw_lines = [
+        re.sub(r"\s+", " ", line.strip(" -*•\t").strip())
+        for line in (description or "").splitlines()
+        if line.strip()
+    ]
+
+    colon_lines = [line for line in raw_lines if ":" in line]
+    if colon_lines:
+        candidates = colon_lines
+    else:
+        candidates = [
+            chunk.strip()
+            for chunk in re.split(r"(?<=[.!?])\s+", " ".join(raw_lines))
+            if chunk.strip()
+        ]
+
+    seen = set()
+    bullets = []
+    for item in candidates:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        bullets.append(item)
+        if len(bullets) >= 4:
+            break
+    return bullets
 
 
 def clear_all():
