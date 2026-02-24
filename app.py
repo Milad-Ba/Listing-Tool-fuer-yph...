@@ -132,8 +132,9 @@ EBAY_TEMPLATE = r"""
   .luxe-price { font-family: 'Playfair Display', serif; font-size: 42px; color: #171717; display: block; line-height: 1; margin-bottom: 10px; }
   .luxe-desc { font-size: 15px; color: #525252; margin-bottom: 40px; text-align: justify; font-weight: 300; }
   .luxe-specs-title { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #171717; border-bottom: 1px solid #f5f5f5; padding-bottom: 10px; margin-bottom: 20px; }
-  .luxe-spec-item { display: flex; align-items: flex-start; font-size: 14px; color: #525252; margin-bottom: 12px; }
-  .luxe-spec-icon { color: #d4d4d4; margin-right: 15px; font-size: 16px; }
+  .luxe-spec-item { display: flex; align-items: center; gap: 12px; font-size: 14px; color: #525252; margin-bottom: 12px; }
+  .luxe-spec-icon { color: #cfa7a7; font-size: 14px; line-height: 1; flex: 0 0 auto; }
+  .luxe-spec-text { color: #525252; }
   .luxe-promo-section { margin-bottom: 80px; border: 1px solid #f5f5f5; background: #fafafa; }
   .luxe-promo-img { width: 100%; height: 300px; object-fit: cover; display: block; }
   .luxe-promo-content { padding: 40px; text-align: center; }
@@ -194,7 +195,7 @@ EBAY_TEMPLATE = r"""
       <div class="luxe-desc">{{DESCRIPTION}}</div>
       <div class="luxe-specs">
         <h3 class="luxe-specs-title">Details &amp; Material</h3>
-        {{SPECS_BLOCK}}
+        {{SPECS}}
       </div>
     </div>
   </div>
@@ -237,14 +238,26 @@ def build_specs_html(specs_lines: list[str]) -> str:
 
 def build_ebay_template(title: str, description: str, specs_lines: list[str]) -> str:
     safe_title = escape((title or '').strip())
-    safe_desc = escape((description or '').strip())
+    description_text = (description or '').strip()
+    safe_desc = escape(description_text)
     safe_desc = safe_desc.replace("\n\n", "<br><br>").replace("\n", "<br>")
-    template = EBAY_TEMPLATE.replace("{{TITLE}}", safe_title).replace("{{DESCRIPTION}}", safe_desc)
 
-    if specs_lines:
-        return template.replace("{{SPECS_BLOCK}}", build_specs_html(specs_lines))
+    spec_lines = []
+    for raw_line in description_text.splitlines():
+        line = raw_line.strip().lstrip("-•* ").strip()
+        if line:
+            spec_lines.append(
+                f'<div class="luxe-spec-item"><span class="luxe-spec-icon">◈</span>'
+                f'<span class="luxe-spec-text">{escape(line)}</span></div>'
+            )
+    specs_html = "\n        ".join(spec_lines)
 
-    return re.sub(r"\s*<div class=\"luxe-specs\">.*?</div>", "", template, flags=re.S)
+    return (
+        EBAY_TEMPLATE
+        .replace("{{TITLE}}", safe_title)
+        .replace("{{DESCRIPTION}}", safe_desc)
+        .replace("{{SPECS}}", specs_html)
+    )
 
 
 def clear_all():
