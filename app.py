@@ -74,11 +74,6 @@ Ausgabeformat MUSS exakt sein:
 TITLE: <eine Zeile>
 DESCRIPTION:
 <ein oder mehrere Absätze>
-SPECS:
-- Form: <Wert oder n/a>
-- Stein: <Wert oder n/a>
-- Material: <Wert oder n/a>
-- Beschichtung: <Wert oder n/a>
 
 Regeln:
 - Gib NUR den [DE]-Block aus.
@@ -87,8 +82,6 @@ Regeln:
 - Übernimm KEINE Marken-, Hersteller-, Shop- oder Modellnamen aus dem Input.
 - Nutze Informationen aus SOURCE, IMAGE NOTES, VARIANTS NOTE und UPDATE NOTES als Faktenbasis.
 - Keine Emojis, keine Zusatzkommentare.
-- Gib im SPECS-Teil nur faktenbasierte Bullet-Zeilen aus (keine Fließtexte).
-- Wenn ein Feld unbekannt ist, nutze "n/a".
 """.strip()
 
 VISION_SYSTEM_PROMPT = """
@@ -132,9 +125,8 @@ EBAY_TEMPLATE = r"""
   .luxe-price { font-family: 'Playfair Display', serif; font-size: 42px; color: #171717; display: block; line-height: 1; margin-bottom: 10px; }
   .luxe-desc { font-size: 15px; color: #525252; margin-bottom: 40px; text-align: justify; font-weight: 300; }
   .luxe-specs-title { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #171717; border-bottom: 1px solid #f5f5f5; padding-bottom: 10px; margin-bottom: 20px; }
-  .luxe-spec-item { display: flex; align-items: center; gap: 12px; font-size: 14px; color: #525252; margin-bottom: 12px; }
-  .luxe-spec-icon { color: #cfa7a7; font-size: 14px; line-height: 1; flex: 0 0 auto; }
-  .luxe-spec-text { color: #525252; }
+  .luxe-spec-item { display: flex; align-items: flex-start; font-size: 14px; color: #525252; margin-bottom: 12px; }
+  .luxe-spec-icon { color: #d4d4d4; margin-right: 15px; font-size: 16px; }
   .luxe-promo-section { margin-bottom: 80px; border: 1px solid #f5f5f5; background: #fafafa; }
   .luxe-promo-img { width: 100%; height: 300px; object-fit: cover; display: block; }
   .luxe-promo-content { padding: 40px; text-align: center; }
@@ -195,7 +187,6 @@ EBAY_TEMPLATE = r"""
       <div class="luxe-desc">{{DESCRIPTION}}</div>
       <div class="luxe-specs">
         <h3 class="luxe-specs-title">Details &amp; Material</h3>
-        {{SPECS}}
       </div>
     </div>
   </div>
@@ -223,41 +214,11 @@ EBAY_TEMPLATE = r"""
 """
 
 
-def build_specs_html(specs_lines: list[str]) -> str:
-    items = []
-    for line in specs_lines:
-        cleaned = re.sub(r"^\s*[-*•]\s*", "", (line or "").strip())
-        if not cleaned:
-            continue
-        safe_line = escape(cleaned)
-        items.append(
-            f'<div class="luxe-spec-item"><span class="luxe-spec-icon">✦</span><span>{safe_line}</span></div>'
-        )
-    return "\n".join(items)
-
-
-def build_ebay_template(title: str, description: str, specs_lines: list[str]) -> str:
+def build_ebay_template(title: str, description: str) -> str:
     safe_title = escape((title or '').strip())
-    description_text = (description or '').strip()
-    safe_desc = escape(description_text)
+    safe_desc = escape((description or '').strip())
     safe_desc = safe_desc.replace("\n\n", "<br><br>").replace("\n", "<br>")
-
-    spec_lines = []
-    for raw_line in description_text.splitlines():
-        line = raw_line.strip().lstrip("-•* ").strip()
-        if line:
-            spec_lines.append(
-                f'<div class="luxe-spec-item"><span class="luxe-spec-icon">◈</span>'
-                f'<span class="luxe-spec-text">{escape(line)}</span></div>'
-            )
-    specs_html = "\n        ".join(spec_lines)
-
-    return (
-        EBAY_TEMPLATE
-        .replace("{{TITLE}}", safe_title)
-        .replace("{{DESCRIPTION}}", safe_desc)
-        .replace("{{SPECS}}", specs_html)
-    )
+    return EBAY_TEMPLATE.replace("{{TITLE}}", safe_title).replace("{{DESCRIPTION}}", safe_desc)
 
 
 def clear_all():
@@ -275,7 +236,6 @@ def clear_all():
 
     for key in keys_to_clear:
         st.session_state[key] = ""
-    st.session_state["out_specs_lines"] = []
 
     current_uploader_key = st.session_state.get("uploader_key", 0)
     st.session_state.pop(f"image_upload_{current_uploader_key}", None)
@@ -318,42 +278,14 @@ def parse_block(text: str, tag: str = "DE") -> dict:
     block = match.group(1).strip() if match else ""
 
     title_match = re.search(r"(?m)^\s*TITLE:\s*(.+)\s*$", block)
-    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.*?)(?:\n\s*SPECS:\s*|\s*$)", block)
-    specs_lines = extract_specs_lines(block)
+    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.+)\s*$", block)
 
     return {
         "raw": cleaned,
         "title": title_match.group(1).strip() if title_match else "",
         "desc": desc_match.group(1).strip() if desc_match else "",
-        "specs_lines": specs_lines,
         "has_block": bool(block),
     }
-
-
-def extract_specs_lines(block: str) -> list[str]:
-    if not block:
-        return []
-
-    specs_match = re.search(r"(?is)\bSPECS:\s*(.*)$", block)
-    if specs_match:
-        candidate = specs_match.group(1)
-    else:
-        desc_match = re.search(r"(?is)\bDESCRIPTION:\s*(.*)$", block)
-        candidate = desc_match.group(1) if desc_match else block
-
-    specs = []
-    for raw_line in candidate.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        bullet = re.match(r"^[-*•]\s*(.+)$", line)
-        if not bullet:
-            continue
-        text = bullet.group(1).strip()
-        if re.match(r"(?i)^(form|stein|material|beschichtung)\s*:", text):
-            specs.append(f"- {text}")
-
-    return specs
 
 
 def de_title_ok(title: str) -> bool:
@@ -573,7 +505,6 @@ with col1:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
-            st.session_state["out_specs_lines"] = parsed_de["specs_lines"]
             st.rerun()
 
     with st.form("update_form"):
@@ -635,7 +566,6 @@ with col2:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
-            st.session_state["out_specs_lines"] = parsed_de["specs_lines"]
 
     st.text_input("Title (DE) — must be ≤ 80 chars", key="out_de_title")
     st.caption(f"DE title length: {len(st.session_state.get('out_de_title', ''))} / 80")
@@ -644,8 +574,7 @@ with col2:
     de_title_val = st.session_state.get("out_de_title", "")
     de_desc_val = st.session_state.get("out_de_desc", "")
     combined_de = f"{de_title_val}\n\n{de_desc_val}"
-    specs_lines_val = st.session_state.get("out_specs_lines", [])
-    ebay_html = build_ebay_template(de_title_val, de_desc_val, specs_lines_val)
+    ebay_html = build_ebay_template(de_title_val, de_desc_val)
 
     col_copy_left, col_copy_mid, col_copy_right, col_copy_template = st.columns([1, 1, 1, 1.2])
     with col_copy_left:
