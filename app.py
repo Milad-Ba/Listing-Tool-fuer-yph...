@@ -74,6 +74,11 @@ Ausgabeformat MUSS exakt sein:
 TITLE: <eine Zeile>
 DESCRIPTION:
 <ein oder mehrere Absätze>
+BULLETS:
+- <Bullet 1>
+- <Bullet 2>
+- <Bullet 3>
+- <Bullet 4>
 
 Regeln:
 - Gib NUR den [DE]-Block aus.
@@ -82,6 +87,8 @@ Regeln:
 - Übernimm KEINE Marken-, Hersteller-, Shop- oder Modellnamen aus dem Input.
 - Nutze Informationen aus SOURCE, IMAGE NOTES, VARIANTS NOTE und UPDATE NOTES als Faktenbasis.
 - Keine Emojis, keine Zusatzkommentare.
+- BULLETS: exakt 4 kurze Bullet-Points aus den wichtigsten Produktfakten.
+- Jeder Bullet beginnt mit "- ".
 """.strip()
 
 VISION_SYSTEM_PROMPT = """
@@ -215,11 +222,10 @@ EBAY_TEMPLATE = r"""
 """
 
 
-def build_ebay_template(title: str, description: str) -> str:
-    bullet_items = build_detail_bullets(description)
+def build_ebay_template(title: str, description: str, bullets: list[str]) -> str:
     bullets_html = "".join(
         f'<div class="luxe-spec-item"><span class="luxe-spec-icon">◇</span><span>{escape(item)}</span></div>'
-        for item in bullet_items
+        for item in (bullets or [])
     )
 
     safe_title = escape((title or '').strip())
@@ -233,36 +239,6 @@ def build_ebay_template(title: str, description: str) -> str:
     )
 
 
-def build_detail_bullets(description: str) -> list[str]:
-    raw_lines = [
-        re.sub(r"\s+", " ", line.strip(" -*•\t").strip())
-        for line in (description or "").splitlines()
-        if line.strip()
-    ]
-
-    colon_lines = [line for line in raw_lines if ":" in line]
-    if colon_lines:
-        candidates = colon_lines
-    else:
-        candidates = [
-            chunk.strip()
-            for chunk in re.split(r"(?<=[.!?])\s+", " ".join(raw_lines))
-            if chunk.strip()
-        ]
-
-    seen = set()
-    bullets = []
-    for item in candidates:
-        key = item.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        bullets.append(item)
-        if len(bullets) >= 4:
-            break
-    return bullets
-
-
 def clear_all():
     keys_to_clear = [
         "source_text",
@@ -272,6 +248,7 @@ def clear_all():
         "update_notes",
         "out_de_title",
         "out_de_desc",
+        "out_de_bullets",
         "draft_raw",
         "image_upload",
     ]
@@ -320,12 +297,21 @@ def parse_block(text: str, tag: str = "DE") -> dict:
     block = match.group(1).strip() if match else ""
 
     title_match = re.search(r"(?m)^\s*TITLE:\s*(.+)\s*$", block)
-    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.+)\s*$", block)
+    desc_match = re.search(r"(?s)DESCRIPTION:\s*(.*?)(?:\nBULLETS:|\s*$)", block)
+    bullets_match = re.search(r"(?s)BULLETS:\s*(.+?)\s*$", block)
+
+    bullet_items = []
+    if bullets_match:
+        for line in bullets_match.group(1).splitlines():
+            line = re.sub(r"^\s*[-*•]\s*", "", line).strip()
+            if line:
+                bullet_items.append(line)
 
     return {
         "raw": cleaned,
         "title": title_match.group(1).strip() if title_match else "",
         "desc": desc_match.group(1).strip() if desc_match else "",
+        "bullets": bullet_items[:4],
         "has_block": bool(block),
     }
 
@@ -547,6 +533,7 @@ with col1:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
+            st.session_state["out_de_bullets"] = parsed_de.get("bullets", [])
             st.rerun()
 
     with st.form("update_form"):
@@ -608,6 +595,7 @@ with col2:
             st.session_state["draft_raw"] = parsed_de["raw"]
             st.session_state["out_de_title"] = parsed_de["title"]
             st.session_state["out_de_desc"] = parsed_de["desc"]
+            st.session_state["out_de_bullets"] = parsed_de.get("bullets", [])
 
     st.text_input("Title (DE) — must be ≤ 80 chars", key="out_de_title")
     st.caption(f"DE title length: {len(st.session_state.get('out_de_title', ''))} / 80")
@@ -616,7 +604,8 @@ with col2:
     de_title_val = st.session_state.get("out_de_title", "")
     de_desc_val = st.session_state.get("out_de_desc", "")
     combined_de = f"{de_title_val}\n\n{de_desc_val}"
-    ebay_html = build_ebay_template(de_title_val, de_desc_val)
+    de_bullets_val = st.session_state.get("out_de_bullets", [])
+    ebay_html = build_ebay_template(de_title_val, de_desc_val, de_bullets_val)
 
     col_copy_left, col_copy_mid, col_copy_right, col_copy_template = st.columns([1, 1, 1, 1.2])
     with col_copy_left:
