@@ -607,6 +607,7 @@ with col2:
     combined_de = f"{de_title_val}\n\n{de_desc_val}"
     de_bullets_val = st.session_state.get("out_de_bullets", [])
     ebay_html = build_ebay_template(de_title_val, de_desc_val, de_bullets_val)
+    title_and_template = f"{de_title_val}\n\n\n{ebay_html}"
 
     col_copy_left, col_copy_mid, col_copy_right, col_copy_template = st.columns([1, 1, 1, 1.2])
     with col_copy_left:
@@ -616,7 +617,7 @@ with col2:
     with col_copy_right:
         render_copy_button("Copy DE Description", de_desc_val, key="copy_de_desc")
     with col_copy_template:
-        render_copy_button("Copy eBay Template (DE)", ebay_html, key="copy_de_ebay_template")
+        render_copy_button("Copy Title and Template", title_and_template, key="copy_de_ebay_template")
 
     st.divider()
     st.caption("Draft memory (what the model will update next):")
